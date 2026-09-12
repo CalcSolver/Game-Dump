@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Minecraft</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #111;
+            color: white;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+        h1 {
+            margin: 5px;
+            font-size: 1.5rem;
+            color: #55ff55;
+            text-shadow: 2px 2px #000;
+        }
+        #game-container {
+            position: relative;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            border: 4px solid #333;
+        }
+        canvas {
+            display: block;
+            background: #87CEEB;
+        }
+        #ui {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+            background: rgba(0,0,0,0.5);
+            padding: 8px;
+            border-radius: 5px;
+        }
+        .slot {
+            width: 40px;
+            height: 40px;
+            border: 2px solid #555;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.8rem;
+            background: #222;
+            cursor: pointer;
+            position: relative;
+        }
+        .slot.selected {
+            border-color: #fff;
+            transform: scale(1.05);
+        }
+        .slot span {
+            position: absolute;
+            bottom: 2px;
+            right: 4px;
+            font-size: 0.7rem;
+            color: #ffx;
+        }
+        #instructions {
+            margin-top: 8px;
+            font-size: 0.75rem;
+            color: #aaa;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>2D MINECRAFT</h1>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="480"></canvas>
+    </div>
+
+    <div id="ui">
+        <div class="slot selected" id="slot-0">1<span></span></div>
+        <div class="slot" id="slot-1">2<span></span></div>
+        <div class="slot" id="slot-2">3<span></span></div>
+        <div class="slot" id="slot-3">4<span></span></div>
+        <div class="slot" id="slot-4">5<span></span></div>
+        <div class="slot" id="slot-5">6<span></span></div>
+    </div>
+
+    <div id="instructions">
+        <b>A/D</b> or <b>Left/Right</b>: Move | <b>Space</b> or <b>W</b>: Jump | <b>Click/Tap</b>: Break/Place Block | <b>1-6</b>: Select Slot
+    </div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// Game constants
+const TILE_SIZE = 32;
+const MAP_WIDTH = 100; // in tiles
+const MAP_HEIGHT = 60; // in tiles
+
+// Block types
+const AIR = 0;
+const DIRT = 1;
+const GRASS = 2;
+const STONE = 3;
+const WOOD = 4;
+const LEAVES = 5;
+const PLANK = 6;
+
+const blockColors = {
+    [DIRT]: '#8B4513',
+    [GRASS]: '#559933',
+    [STONE]: '#777777',
+    [WOOD]: '#654321',
+    [LEAVES]: '#2d4c1e',
+    [PLANK]: '#A0522D'
+};
+
+const blockNames = {
+    [DIRT]: 'Dirt',
+    [GRASS]: 'Grass',
+    [STONE]: 'Stone',
+    [WOOD]: 'Wood',
+    [LEAVES]: 'Leaves',
+    [PLANK]: 'Plank'
+};
+
+// Generate Map
+let map = [];
+for (let y = 0; y < MAP_HEIGHT; y++) {
+    map[y] = [];
+    for (let x = 0; x < MAP_WIDTH; x++) {
+        // Simple procedural generation
+        let surfaceHeight = Math.floor(MAP_HEIGHT * 0.4 + Math.sin(x * 0.1) * 3 + Math.sin(x * 0.03) * 6);
+        if (y > surfaceHeight + 4) {
+            map[y][x] = STONE;
+        } else if (y > surfaceHeight) {
+            map[y][x] = DIRT;
+        } else if (y === surfaceHeight) {
+            map[y][x] = GRASS;
+        } else {
+            map[y][x] = AIR;
+        }
+
+        // Add some trees
+        if (y === surfaceHeight && x % 15 === 0 && x > 5 && x < MAP_WIDTH - 5) {
+            // Trunk
+            for (let ty = 1; ty <= 4; ty++) {
+                map[surfaceHeight - ty][x] = WOOD;
+            }
+            // Leaves
+            for (let lx = -2; lx <= 2; lx++) {
+                for (let ly = -5; ly >= -7; lyاعدة--) { // fixed loop notation below properly
+                    // Simple canopy
+                }
+            }
+            for (let ly = -4; ly >= -6; ly++) {
+                for (let lx = -2; lx <= 2; lx++) {
+                    if (Math.abs(lx) !== 2 || ly !== -6) {
+                        if (map[surfaceHeight + ly] && map[surfaceHeight + ly][x + lx] === AIR) {
+                            map[surfaceHeight + ly][x + lx] = LEAVES;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Player object
+let player = {
+    x: 50 * TILE_SIZE,
+    y: 10 * TILE_SIZE,
+    width: 20,
+    height: 44,
+    vx: 0,
+    vy: 0,
+    speed: 3.5,
+    jumpForce: -10,
+    gravity: 0.45,
+    grounded: false
+};
+
+// Camera object
+let camera = {
+    x: 0,
+    y: 0
+};
+
+// Inventory / Hotbar
+let inventory = {
+    [DIRT]: 20,
+    [STONE]: 10,
+    [WOOD]: 5,
+    [PLANK]: 15,
+    [LEAVES]: 0,
+    [GRASS]: 0
+};
+let hotbar = [DIRT, STONE, WOOD, PLANK, LEAVES, GRASS];
+let selectedSlot = 0;
+
+// Input tracking
+let keys = {};
+
+window.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if (e.code >= 'Digit1' && e.code <= 'Digit6') {
+        selectedSlot = parseInt(e.code) - 1;
+        updateUI();
+    }
+});
+
+window.addEventListener('keyup', e => {
+    keys[e.code] = false;
+});
+
+// Mouse interaction
+let mouse = {
+    x: 0,
+    y: 0,
+    worldX: 0,
+    worldY: 0,
+    down: false,
+    button: 0
+};
+
+canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = e.clientX - rect.left;
+    mouse.y = e.clientY - rect.top;
+    mouse.worldX = mouse.x + camera.x;
+    mouse.worldY = mouse.y + camera.y;
+});
+
+canvas.addEventListener('mousedown', e => {
+    mouse.down = true;
+    mouse.button = e.button; // 0 = left (break), 2 = right (place)
+    handleMouseAction();
+});
+
+canvas.addEventListener('mouseup', () => {
+    mouse.down = false;
+});
+
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+function updateUI() {
+    for (let i = 0; i < 6; i++) {
+        const slotEl = document.getElementById(`slot-${i}`);
+        if (i === selectedSlot) {
+            slotEl.classList.add('selected');
+        } else {
+            slotEl.classList.remove('selected');
+        }
+        const blockType = hotbar[i];
+        slotEl.style.backgroundColor = blockColors[blockType] ? blockColors[blockType] : '#222';
+        slotEl.querySelector('span').innerText = inventory[blockType] > 0 ? inventory[blockType] : '';
+    }
+}
+
+function handleMouseAction() {
+    let tX = Math.floor(mouse.worldX / TILE_SIZE);
+    let tY = Math.floor(mouse.worldY / TILE_SIZE);
+
+    if (tX < 0 || tX >= MAP_WIDTH || tY < 0 || tY >= MAP_HEIGHT) return;
+
+    // Check reach distance from player center
+    let pCenterX = player.x + player.width / 2;
+    let pCenterY = player.y + player.height / 2;
+    let dist = Math.hypot(tX * TILE_SIZE + TILE_SIZE/2 - pCenterX, tY * TILE_SIZE + TILE_SIZE/2 - pCenterY);
+    if (dist > 120) return; // Reach limit
+
+    if (mouse.button === 0) {
+        // Left click: Break block
+        let block = map[tY][tX];
+        if (block !== AIR) {
+            map[tY][tX] = AIR;
+            inventory[block] = (inventory[block] || 0) + 1;
+            updateUI();
+        }
+    } else if (mouse.button === 2) {
+        // Right click: Place block
+        let activeBlock = hotbar[selectedSlot];
+        if (inventory[activeBlock] > 0 && map[tY][tX] === AIR) {
+            // Don't place inside player bounds
+            let bBox = { x: tX * TILE_SIZE, y: tY * TILE_SIZE, w: TILE_SIZE, h: TILE_SIZE };
+            let pBox = { x: player.x, y: player.y, w: player.width, h: player.height };
+            
+            if (!(pBox.x < bBox.x + bBox.w && pBox.x + pBox.w > bBox.x && pBox.y < bBox.y + bBox.h && pBox.y + pBox.h > bBox.y)) {
+                map[tY][tX] = activeBlock;
+                inventory[activeBlock]--;
+                updateUI();
+            }
+        }
+    }
+}
+
+// Collision detection helpers
+function isSolid(x, y) {
+    let tX = Math.floor(x / TILE_SIZE);
+    let tY = Math.floor(y / TILE_SIZE);
+    if (tX < 0 || tX >= MAP_WIDTH || tY < 0 || tY >= MAP_HEIGHT) return true;
+    return map[tY][tX] !== AIR;
+}
+
+function updatePhysics() {
+    // Horizontal movement
+    player.vx = 0;
+    if (keys['KeyA'] || keys['ArrowLeft']) player.vx = -player.speed;
+    if (keys['KeyD'] || keys['ArrowRight']) player.vx = player.speed;
+
+    player.x += player.vx;
+    // Horizontal collisions
+    if (player.vx > 0) {
+        if (isSolid(player.x + player.width, player.y) || isSolid(player.x + player.width, player.y + player.height - 2)) {
+            player.x = Math.floor((player.x + player.width) / TILE_SIZE) * TILE_SIZE - player.width;
+        }
+    } else if (player.vx < 0) {
+        if (isSolid(player.x, player.y) || isSolid(player.x, player.y + player.height - 2)) {
+            player.x = Math.floor(player.x / TILE_SIZE) * TILE_SIZE + TILE_SIZE;
+        }
+    }
+
+    // Vertical movement (Gravity & Jumping)
+    player.vy += player.gravity;
+    if ((keys['Space'] || keys['KeyW'] || keys['ArrowUp']) && player.grounded) {
+        player.vy = player.jumpForce;
+        player.grounded = false;
+    }
+
+    player.y += player.vy;
+    player.grounded = false;
+
+    // Vertical collisions
+    if (player.vy > 0) {
+        if (isSolid(player.x, player.y + player.height) || isSolid(player.x + player.width - 1, player.y + player.height)) {
+            player.y = Math.floor((player.y + player.height) / TILE_SIZE) * TILE_SIZE - player.height;
+            player.vy = 0;
+            player.grounded = true;
+        }
+    } else if (player.vy < 0) {
+        if (isSolid(player.x, player.y) || isSolid(player.x + player.width - 1, player.y)) {
+            player.y = Math.floor(player.y / TILE_SIZE) * TILE_SIZE + TILE_SIZE;
+            player.vy = 0;
+        }
+    }
+
+    // Camera follow player
+    camera.x = player.x - canvas.width / 2 + player.width / 2;
+    camera.y = player.y - canvas.height / 2 + player.height / 2;
+
+    // Clamp camera to map bounds
+    camera.x = Math.max(0, Math.min(camera.x, MAP_WIDTH * TILE_SIZE - canvas.width));
+    camera.y = Math.max(0, Math.min(camera.y, MAP_HEIGHT * TILE_SIZE - canvas.height));
+}
+
+function draw() {
+    // Clear background (Sky)
+    ctx.fillStyle = '#87CEEB';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Render Map
+    let startX = Math.floor(camera.x / TILE_SIZE);
+    let endX = startX + Math.ceil(canvas.width / TILE_SIZE) + 1;
+    let startY = Math.floor(camera.y / TILE_SIZE);
+    let endY = startY + Math.ceil(canvas.height / TILE_SIZE) + 1;
+
+    for (let y = startY; y < endY; y++) {
+        for (let x = startX; x < endX; x++) {
+            if (y >= 0 && y < MAP_HEIGHT && x >= 0 && x < MAP_WIDTH) {
+                let block = map[y][x];
+                if (block !== AIR) {
+                    ctx.fillStyle = blockColors[block];
+                    ctx.fillRect(x * TILE_SIZE - camera.x, y * TILE_SIZE - camera.y, TILE_SIZE, TILE_SIZE);
+                    
+                    // Simple grid/texture outline detail
+                    ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+                    ctx.strokeRect(x * TILE_SIZE - camera.x, y * TILE_Size - camera.y, TILE_SIZE, TILE_SIZE);
+                }
+            }
+        }
+    }
+
+    // Render Player (Classic Minecraft Steve styled pixel look)
+    ctx.fillStyle = '#225577'; // Pants
+    ctx.fillRect(player.x - camera.x + 2, player.y - camera.y + 26, player.width - 4, 18);
+    
+    ctx.fillStyle = '#336699'; // Shirt
+    ctx.fillRect(player.x - camera.x, player.y - camera.y + 12, player.width, 14);
+
+    ctx.fillStyle = '#e0ac69'; // Head
+    ctx.fillRect(player.x - camera.x + 2, player.y - camera.y, player.width - 4, 12);
+
+    // Highlight block hovered by mouse
+    let tX = Math.floor(mouse.worldX / TILE_SIZE);
+    let tY = Math.floor(mouse.worldY / TILE_SIZE);
+    let pCenterX = player.x + player.width / 2;
+    let pCenterY = player.y + player.height / 2;
+    let dist = Math.hypot(tX * TILE_SIZE + TILE_SIZE/2 - pCenterX, tY * TILE_SIZE + TILE_SIZE/2 - pCenterY);
+    
+    if (dist <= 120 && tX >= 0 && tX < MAP_WIDTH && tY >= 0 && tY < MAP_HEIGHT) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(tX * TILE_SIZE - camera.x, tY * TILE_SIZE - camera.y, TILE_SIZE, TILE_SIZE);
+        ctx.lineWidth = 1;
+    }
+}
+
+function gameLoop() {
+    updatePhysics();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+updateUI();
+gameLoop();
+</script>
+
+</body>
+</html>
