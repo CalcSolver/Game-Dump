@@ -64,7 +64,7 @@
             bottom: 2px;
             right: 4px;
             font-size: 0.7rem;
-            color: #ffx;
+            color: #fff;
         }
         #instructions {
             margin-top: 8px;
@@ -153,13 +153,8 @@ for (let y = 0; y < MAP_HEIGHT; y++) {
             for (let ty = 1; ty <= 4; ty++) {
                 map[surfaceHeight - ty][x] = WOOD;
             }
-            // Leaves
-            for (let lx = -2; lx <= 2; lx++) {
-                for (let ly = -5; ly >= -7; lyاعدة--) { // fixed loop notation below properly
-                    // Simple canopy
-                }
-            }
-            for (let ly = -4; ly >= -6; ly++) {
+            // Leaves canopy
+            for (let ly = -4; ly >= -6; ly--) {
                 for (let lx = -2; lx <= 2; lx++) {
                     if (Math.abs(lx) !== 2 || ly !== -6) {
                         if (map[surfaceHeight + ly] && map[surfaceHeight + ly][x + lx] === AIR) {
@@ -380,7 +375,7 @@ function draw() {
                     
                     // Simple grid/texture outline detail
                     ctx.strokeStyle = 'rgba(0,0,0,0.1)';
-                    ctx.strokeRect(x * TILE_SIZE - camera.x, y * TILE_Size - camera.y, TILE_SIZE, TILE_SIZE);
+                    ctx.strokeRect(x * TILE_SIZE - camera.x, y * TILE_SIZE - camera.y, TILE_SIZE, TILE_SIZE);
                 }
             }
         }
