@@ -3,32 +3,43 @@ import random
 import threading
 import time
 import pygame
+import os
 
-# Load MP3 sound
+# Try to load MP3 safely
 pygame.mixer.init()
-pygame.mixer.music.load("erro.mp3")  # download the MP3 into same folder
+if os.path.exists("erro.mp3"):
+    pygame.mixer.music.load("erro.mp3")
+else:
+    print("WARNING: erro.mp3 not found. Sound disabled.")
 
 windows = []
+
+def play_sound():
+    try:
+        pygame.mixer.music.play()
+    except:
+        pass
 
 def spawn_error_window():
     win = tk.Tk()
     win.title("Windows Error")
     win.geometry("300x120")
 
-    # Random diagonal glitch positions
-    x = random.randint(0, win.winfo_screenwidth() - 300)
-    y = random.randint(0, win.winfo_screenheight() - 120)
+    # Diagonal glitch positions
+    screen_w = win.winfo_screenwidth()
+    screen_h = win.winfo_screenheight()
+
+    x = random.randint(0, screen_w - 300)
+    y = random.randint(0, screen_h - 120)
+
     win.geometry(f"+{x}+{y}")
 
     label = tk.Label(win, text="Critical System Fault\nMemory integrity compromised.", fg="red")
     label.pack(expand=True)
 
     windows.append(win)
+    play_sound()
 
-    # Play sound
-    pygame.mixer.music.play()
-
-    win.after(2000, lambda: None)  # keep window alive
     win.mainloop()
 
 def spam_windows():
@@ -69,7 +80,11 @@ def fake_bsod():
 
     bsod.mainloop()
 
-# Run chaos
+# Start chaos
 threading.Thread(target=spam_windows, daemon=True).start()
+
+# Wait for windows to spawn
 time.sleep(5)
+
+# Show BSOD
 fake_bsod()
